@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE,warning = FALSE)
 library(tidyverse)
 library(lubridate)
 library(DT)
+library(stringr)
 source(file = "Data_Access/database_functions.R")
 source(file = "Shared/datatable_JS.R")
 ```
@@ -29,12 +30,12 @@ mindate = floor_date(today(), "week")
 hold_Status <- c("Act-Needs Processed", "Act-Prepay Needed", "On Hold")
 
 vw <- tbl(conn,"vwReportKeyData") %>% 
-  select(Brand, OrderStatus, ScheduledCompleteDate, Plant, ReceivedDate, OrderCaseTotal, ShopFloorNumber, OrderTotal) %>% 
+  select(Brand, OrderStatus, ScheduledCompleteDate, Plant, ReceivedDate, OrderCaseTotal, ShopFloorNumber, OrderTotal, ProductLine) %>% 
   filter(OrderStatus != "Cancelled" & OrderStatus != "cancelled" & (ScheduledCompleteDate == "2001-01-01" | ScheduledCompleteDate > mindate | is.na(ScheduledCompleteDate))) %>% 
   collect()
 
 t <- vw %>%
-  filter(!is.na(ReceivedDate) & !is.na(OrderCaseTotal) & OrderCaseTotal != 0)  %>% 
+  filter(!is.na(ReceivedDate) & !is.na(OrderCaseTotal) & OrderCaseTotal != 0 & (!str_detect(ShopFloorNumber, "TEST")))  %>% 
   mutate(JobPrefix = str_sub(ShopFloorNumber, 1, 2)) %>%
   mutate(weekNumeric = if_else(year(ScheduledCompleteDate) == 2001 | is.na(ScheduledCompleteDate) | OrderStatus == "On Hold", 99, isoweek(ScheduledCompleteDate))) %>% 
   mutate(weekNo = paste0(year(ScheduledCompleteDate), "-", sprintf("%02d",weekNumeric)))
@@ -42,7 +43,7 @@ t <- vw %>%
 ```
 
 ```{r}
-sked <- inner_join(t,LineMap,by="JobPrefix") %>%
+sked <- inner_join(t,LineMap,by= c('JobPrefix','ProductLine')) %>%
   filter(weekNumeric != 99) %>% 
   select(weekNo, OrderCaseTotal,OrderTotal, Brand, Plant, ProductLine) %>% 
   filter(ProductLine %in% c("Framed", "Full Access")) %>% 
@@ -131,7 +132,7 @@ indym <- indy %>%
 ```
 
 ```{r, echo=FALSE}
-projected <- inner_join(t,LineMap,by="JobPrefix") %>% 
+projected <- inner_join(t,LineMap,by = c("JobPrefix","ProductLine")) %>% 
   filter(weekNumeric == 99) %>%
   select(weekNo, OrderStatus, OrderCaseTotal,OrderTotal, Brand, Plant, ProductLine) %>% 
   filter(ProductLine %in% c("Framed", "Full Access")) %>% 
